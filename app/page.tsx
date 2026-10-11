@@ -44,6 +44,7 @@ export default function Home() {
   const [formData, setFormData] = useState({
     title: '',
     tagline: '',
+    founderEmail: '',
     industry: 'Consumer Goods & Retail',
     targetMarket: '',
     problem: '',
