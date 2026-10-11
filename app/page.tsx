@@ -3,8 +3,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Building2, TrendingUp, ShieldCheck, PieChart, CheckCircle2, 
-  ArrowRight, ArrowLeft, Plus, Trash2, Award, Eye, FileText, Check
+  ArrowRight, ArrowLeft, Plus, Trash2, Award, Eye, FileText, Check, Loader2
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const INDUSTRIES = [
   'Fintech', 'E-Commerce & D2C', 'B2B SaaS', 'Consumer Goods & Retail', 
@@ -36,7 +37,9 @@ const VALIDATION_STAGES = [
 export default function Home() {
   const [step, setStep] = useState(1);
   const [previewTab, setPreviewTab] = useState<'card' | 'audit'>('card');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -98,6 +101,44 @@ export default function Home() {
     }));
   };
 
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      const payload = {
+        title: formData.title || 'Untitled Project',
+        tagline: formData.tagline || 'No tagline provided',
+        industry: formData.industry,
+        target_market: formData.targetMarket || 'General Market',
+        problem_statement: formData.problem,
+        solution_statement: formData.solution,
+        business_model: formData.businessModel,
+        unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : null,
+        target_selling_price: formData.sellingPrice ? parseFloat(formData.sellingPrice) : null,
+        gross_margin: grossMargin ? parseFloat(grossMargin) : null,
+        funding_sought: parseFloat(formData.fundingSought) || 0,
+        equity_offered: formData.equityOffered ? parseFloat(formData.equityOffered) : null,
+        investment_structure: formData.investmentStructure,
+        use_of_funds: formData.useOfFunds,
+        validation_status: formData.validationStage,
+        traction_metrics: formData.tractionMetrics.filter(m => m.key && m.value),
+        competitor_differentiation: formData.differentiation,
+        validation_score: validationAudit.totalScore,
+        status: 'published'
+      };
+
+      const { error } = await supabase.from('pitches').insert([payload]);
+
+      if (error) throw error;
+      setSubmitted(true);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to save pitch to database.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (submitted) {
     return (
       <main className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-6">
@@ -105,12 +146,15 @@ export default function Home() {
           <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 size={36} />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Pitch Validated & Ready!</h2>
+          <h2 className="text-2xl font-bold mb-2">Pitch Saved to Database!</h2>
           <p className="text-slate-400 mb-6">
-            Your startup idea achieved a validation score of <span className="font-bold text-emerald-400">{validationAudit.totalScore}/100</span> and is ready to connect with backers.
+            Your startup idea achieved a validation score of <span className="font-bold text-emerald-400">{validationAudit.totalScore}/100</span> and is stored in Supabase.
           </p>
           <button
-            onClick={() => setSubmitted(false)}
+            onClick={() => {
+              setSubmitted(false);
+              setStep(1);
+            }}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-xl transition"
           >
             Create Another Pitch
@@ -148,6 +192,12 @@ export default function Home() {
             </div>
           </div>
         </header>
+
+        {errorMsg && (
+          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 px-4 py-3 rounded-xl text-sm">
+            {errorMsg}
+          </div>
+        )}
 
         {/* Form Wizard + Realtime Preview Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -453,11 +503,15 @@ export default function Home() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setSubmitted(true)}
-                  disabled={validationAudit.totalScore < 50}
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || validationAudit.totalScore < 50}
                   className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white flex items-center gap-2 shadow-lg shadow-emerald-600/20"
                 >
-                  Submit for Investor Review <Check size={16} />
+                  {isSubmitting ? (
+                    <>Saving to Database... <Loader2 className="animate-spin" size={16} /></>
+                  ) : (
+                    <>Submit for Investor Review <Check size={16} /></>
+                  )}
                 </button>
               )}
             </div>
