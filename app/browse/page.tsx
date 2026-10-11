@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { 
   Building2, TrendingUp, Filter, Search, Award, 
-  ArrowUpRight, CheckCircle2, ChevronRight, PlusCircle 
+  ArrowUpRight, CheckCircle2, ChevronRight, PlusCircle, X, Send, Loader2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -40,7 +40,16 @@ export default function BrowsePitches() {
   const [selectedIndustry, setSelectedIndustry] = useState('All');
   const [minScore, setMinScore] = useState<number>(50);
   const [searchTerm, setSearchTerm] = useState('');
-  const [requestedId, setRequestedId] = useState<string | null>(null);
+
+  // Modal State
+  const [activePitch, setActivePitch] = useState<Pitch | null>(null);
+  const [investorName, setInvestorName] = useState('');
+  const [investorEmail, setInvestorEmail] = useState('');
+  const [investorFirm, setInvestorFirm] = useState('');
+  const [investorMessage, setInvestorMessage] = useState('');
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchPitches() {
@@ -66,8 +75,52 @@ export default function BrowsePitches() {
     return matchesIndustry && matchesScore && matchesSearch;
   });
 
+  const handleOpenConnectModal = (pitch: Pitch) => {
+    setActivePitch(pitch);
+    setRequestSuccess(false);
+    setRequestError(null);
+    setInvestorMessage(`Hi, I reviewed your validated pitch for "${pitch.title}" and would like to request an introduction and review your detailed financial deck.`);
+  };
+
+  const handleSendConnectionRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activePitch) return;
+
+    setSubmittingRequest(true);
+    setRequestError(null);
+
+    try {
+      const { error } = await supabase.from('connection_requests').insert([
+        {
+          pitch_id: activePitch.id,
+          investor_name: investorName,
+          investor_email: investorEmail,
+          investor_firm: investorFirm || null,
+          message: investorMessage,
+          status: 'pending'
+        }
+      ]);
+
+      if (error) throw error;
+
+      setRequestSuccess(true);
+      setTimeout(() => {
+        setActivePitch(null);
+        setInvestorName('');
+        setInvestorEmail('');
+        setInvestorFirm('');
+        setInvestorMessage('');
+        setRequestSuccess(false);
+      }, 2200);
+    } catch (err: unknown) {
+      setRequestError(err instanceof Error ? err.message : 'Failed to submit request.');
+    } finally {
+      setSubmittingRequest(false);
+    }
+  };
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 relative">
       <div className="max-w-6xl mx-auto space-y-8">
         
         {/* Navigation Bar */}
@@ -222,15 +275,10 @@ export default function BrowsePitches() {
                 {/* Bottom Action */}
                 <div className="pt-6 mt-4 border-t border-slate-800/80">
                   <button
-                    onClick={() => setRequestedId(pitch.id)}
-                    disabled={requestedId === pitch.id}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-emerald-600 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20"
+                    onClick={() => handleOpenConnectModal(pitch)}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20"
                   >
-                    {requestedId === pitch.id ? (
-                      <>Introduction Requested <CheckCircle2 size={14} /></>
-                    ) : (
-                      <>Connect with Founder <ArrowUpRight size={14} /></>
-                    )}
+                    Connect with Founder <ArrowUpRight size={14} />
                   </button>
                 </div>
 
@@ -240,6 +288,104 @@ export default function BrowsePitches() {
         )}
 
       </div>
+
+      {/* Investor Connection Modal */}
+      {activePitch && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 sm:p-8 shadow-2xl relative">
+            <button
+              onClick={() => setActivePitch(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+
+            {requestSuccess ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-xl font-bold">Introduction Request Dispatched!</h3>
+                <p className="text-sm text-slate-400">
+                  Your interest in <span className="text-indigo-400 font-semibold">{activePitch.title}</span> has been registered and forwarded to the founder.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendConnectionRequest} className="space-y-4">
+                <div>
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider block">Investor Introduction</span>
+                  <h3 className="text-xl font-bold mt-1 text-slate-100">Connect with {activePitch.title}</h3>
+                </div>
+
+                {requestError && (
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs rounded-xl">
+                    {requestError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs uppercase text-slate-400 font-semibold mb-1">Your Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Alex Sterling"
+                      value={investorName}
+                      onChange={e => setInvestorName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase text-slate-400 font-semibold mb-1">Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="alex@syndicate.vc"
+                      value={investorEmail}
+                      onChange={e => setInvestorEmail(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase text-slate-400 font-semibold mb-1">Fund / Syndicate / Angel Affiliation</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Apex Angels (or Independent)"
+                    value={investorFirm}
+                    onChange={e => setInvestorFirm(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase text-slate-400 font-semibold mb-1">Direct Note to Founder *</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={investorMessage}
+                    onChange={e => setInvestorMessage(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingRequest}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-600/20"
+                >
+                  {submittingRequest ? (
+                    <>Sending Request... <Loader2 className="animate-spin" size={16} /></>
+                  ) : (
+                    <>Send Introduction Request <Send size={16} /></>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
